@@ -1,0 +1,59 @@
+{
+  "name": "@apiratorjs/circuit-breaker",
+  "version": "1.0.0",
+  "description": "A robust and lightweight TypeScript circuit breaker implementation for Node.js applications. Provides fault tolerance and stability by preventing cascading failures in distributed systems with configurable thresholds, automatic recovery, and comprehensive metrics tracking.",
+  "author": {
+    "name": "Alexey Zaitsev",
+    "url": "http://alexeyzaitsev.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apiratorjs/circuit-breaker.git"
+  },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "circuit-breaker",
+    "circuit breaker",
+    "fault-tolerance",
+    "resilience",
+    "microservices",
+    "distributed-systems",
+    "stability",
+    "error-handling",
+    "typescript",
+    "nodejs",
+    "reliability",
+    "cascading-failures",
+    "decorator",
+    "higher-order-function",
+    "metrics",
+    "monitoring",
+    "async",
+    "promises"
+  ],
+  "type": "commonjs",
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "watch": "tsc --watch",
+    "test": "npm run build && node --test dist/test",
+    "prepublishOnly": "npm test"
+  },
+  "engines": {
+    "node": ">=16.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {}
+}
