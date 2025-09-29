@@ -1,7 +1,7 @@
 {
   "name": "@apiratorjs/circuit-breaker",
-  "version": "1.0.0",
-  "description": "A robust and lightweight TypeScript circuit breaker implementation for Node.js applications. Provides fault tolerance and stability by preventing cascading failures in distributed systems with configurable thresholds, automatic recovery, and comprehensive metrics tracking.",
+  "version": "2.0.0",
+  "description": "A robust and lightweight TypeScript circuit breaker implementation for Node.js applications. Provides fault tolerance and stability by preventing cascading failures in distributed systems with configurable thresholds and automatic recovery.",
   "author": {
     "name": "Alexey Zaitsev",
     "url": "http://alexeyzaitsev.com"
@@ -35,7 +35,6 @@
     "cascading-failures",
     "decorator",
     "higher-order-function",
-    "metrics",
     "monitoring",
     "async",
     "promises"

@@ -3,7 +3,7 @@
 [![NPM version](https://img.shields.io/npm/v/@apiratorjs/circuit-breaker.svg)](https://www.npmjs.com/package/@apiratorjs/circuit-breaker)
 [![License: MIT](https://img.shields.io/npm/l/@apiratorjs/circuit-breaker.svg)](https://github.com/apiratorjs/circuit-breaker/blob/main/LICENSE)
 
-A robust and lightweight TypeScript circuit breaker implementation for Node.js applications. Provides fault tolerance and stability by preventing cascading failures in distributed systems with configurable thresholds, automatic recovery, and comprehensive metrics tracking.
+A robust and lightweight TypeScript circuit breaker implementation for Node.js applications. Provides fault tolerance and stability by preventing cascading failures in distributed systems with configurable thresholds and automatic recovery.
 
 > **Note:** Requires Node.js version **>=16.4.0**
 
@@ -125,21 +125,6 @@ enum ECircuitBreakerState {
 }
 ```
 
-### ICircuitBreakerMetrics
-
-Get insights into circuit breaker performance:
-
-```typescript
-interface ICircuitBreakerMetrics {
-  totalCalls: number;           // Total number of calls attempted
-  successfulCalls: number;      // Number of successful calls
-  failedCalls: number;          // Number of failed calls
-  rejectedCalls: number;        // Number of calls rejected due to open circuit
-  currentState: ECircuitBreakerState; // Current circuit state
-  lastFailureTime?: Date;       // When the last failure occurred
-  lastStateChangeTime: Date;    // When the state last changed
-}
-```
 
 ### Usage Example with State Monitoring
 
@@ -158,9 +143,8 @@ const circuitBreaker = new CircuitBreaker({
   }
 });
 
-// Check current state and metrics
+// Check current state
 console.log('Current state:', circuitBreaker.state);
-console.log('Metrics:', circuitBreaker.metrics);
 
 // Example usage
 async function makeCall() {
@@ -171,10 +155,6 @@ async function makeCall() {
     });
   } catch (error) {
     console.log('Call failed:', error.message);
-    
-    // Check metrics after failure
-    const metrics = circuitBreaker.metrics;
-    console.log(`Failed calls: ${metrics.failedCalls}/${metrics.totalCalls}`);
   }
 }
 ```

@@ -3,7 +3,6 @@ import { CircuitArgumentError, CircuitOpenError } from "./errors.js";
 import {
   ECircuitBreakerState,
   ICircuitBreakerOptions,
-  ICircuitBreakerMetrics,
 } from "./types.js";
 
 export class CircuitBreaker {
@@ -18,10 +17,6 @@ export class CircuitBreaker {
   private _lastError?: Error;
   private _onStateChange?: (state: ECircuitBreakerState, error?: Error) => void;
 
-  private _totalCalls: number;
-  private _successfulCalls: number;
-  private _failedCalls: number;
-  private _rejectedCalls: number;
 
   constructor(options: ICircuitBreakerOptions) {
     this._state = ECircuitBreakerState.CLOSED;
@@ -48,10 +43,6 @@ export class CircuitBreaker {
     this._failureThreshold = options.failureThreshold;
     this._onStateChange = options.onStateChange;
 
-    this._totalCalls = 0;
-    this._successfulCalls = 0;
-    this._failedCalls = 0;
-    this._rejectedCalls = 0;
   }
 
   public execute<T>(fn: () => Promise<T>): Promise<T> {
@@ -64,12 +55,8 @@ export class CircuitBreaker {
     }
 
     if (this._state === ECircuitBreakerState.OPEN) {
-      this._rejectedCalls++;
-      this._totalCalls++;
       throw new CircuitOpenError(this._lastError);
     }
-
-    this._totalCalls++;
 
     return this.attemptToExecute(fn);
   }
@@ -78,17 +65,6 @@ export class CircuitBreaker {
     return this._state;
   }
 
-  public get metrics(): ICircuitBreakerMetrics {
-    return {
-      totalCalls: this._totalCalls,
-      successfulCalls: this._successfulCalls,
-      failedCalls: this._failedCalls,
-      rejectedCalls: this._rejectedCalls,
-      currentState: this._state,
-      lastFailureTime: this._lastFailureTime,
-      lastStateChangeTime: this._lastStateChangeTime,
-    };
-  }
 
   private async attemptToExecute<T>(operation: () => Promise<T>): Promise<T> {
     try {
@@ -102,7 +78,6 @@ export class CircuitBreaker {
   }
 
   private onSuccess() {
-    this._successfulCalls++;
 
     if (this._state === ECircuitBreakerState.CLOSED) {
       return;
@@ -118,7 +93,6 @@ export class CircuitBreaker {
   }
 
   private onFailure(error: Error) {
-    this._failedCalls++;
     this._lastError = error;
     this._lastFailureTime = new Date();
 

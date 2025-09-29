@@ -113,12 +113,6 @@ describe("Integration Tests", () => {
       assert.strictEqual(stateChanges.length, 3);
       assert.strictEqual(stateChanges[1].state, ECircuitBreakerState.HALF_OPEN);
       assert.strictEqual(stateChanges[2].state, ECircuitBreakerState.CLOSED);
-
-      const metrics = circuitBreaker.metrics;
-      assert(metrics.totalCalls > 0);
-      assert(metrics.successfulCalls > 0);
-      assert(metrics.failedCalls > 0);
-      assert(metrics.rejectedCalls > 0);
     });
 
     it("should handle intermittent failures correctly", async () => {
@@ -165,12 +159,6 @@ describe("Integration Tests", () => {
       }
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, 7);
-      assert.strictEqual(metrics.successfulCalls, 4);
-      assert.strictEqual(metrics.failedCalls, 3);
-      assert.strictEqual(metrics.rejectedCalls, 0);
     });
 
     it("should handle quick recovery attempts correctly", async () => {
@@ -242,11 +230,6 @@ describe("Integration Tests", () => {
 
       const successful = results.filter((r) => r.status === "fulfilled");
       assert.strictEqual(successful.length, operationCount);
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, operationCount);
-      assert.strictEqual(metrics.successfulCalls, operationCount);
-      assert.strictEqual(metrics.failedCalls, 0);
     });
 
     it("should handle slow operations with timeouts", async () => {
@@ -275,9 +258,6 @@ describe("Integration Tests", () => {
       results.forEach((result) => assert(result.includes("Success")));
 
       assert(endTime - startTime >= 50);
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.successfulCalls, 5);
     });
   });
 

@@ -25,13 +25,6 @@ describe("CircuitBreaker", () => {
       const circuitBreaker = new CircuitBreaker(options);
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, 0);
-      assert.strictEqual(metrics.successfulCalls, 0);
-      assert.strictEqual(metrics.failedCalls, 0);
-      assert.strictEqual(metrics.rejectedCalls, 0);
-      assert.strictEqual(metrics.currentState, ECircuitBreakerState.CLOSED);
     });
 
     it("should call onStateChange callback when provided", async () => {
@@ -81,11 +74,6 @@ describe("CircuitBreaker", () => {
 
       assert.strictEqual(result, "test result");
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, 1);
-      assert.strictEqual(metrics.successfulCalls, 1);
-      assert.strictEqual(metrics.failedCalls, 0);
     });
 
     it("should handle failures and track failure count", async () => {
@@ -106,11 +94,6 @@ describe("CircuitBreaker", () => {
       }
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, 1);
-      assert.strictEqual(metrics.successfulCalls, 0);
-      assert.strictEqual(metrics.failedCalls, 1);
     });
 
     it("should transition to OPEN state after reaching failure threshold", async () => {
@@ -171,9 +154,6 @@ describe("CircuitBreaker", () => {
           )
         );
       }
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.rejectedCalls, 1);
     });
 
     it("should transition to HALF_OPEN after timeout period", async () => {
@@ -269,73 +249,6 @@ describe("CircuitBreaker", () => {
     });
   });
 
-  describe("Metrics Tracking", () => {
-    it("should accurately track all metrics", async () => {
-      const options = {
-        durationOfBreakInMs: 60000,
-        failureThreshold: 3,
-        successThreshold: 2,
-      };
-
-      const circuitBreaker = new CircuitBreaker(options);
-      const successfulOperation = createSuccessfulOperation();
-      const failingOperation = createFailingOperation();
-
-      await circuitBreaker.execute(successfulOperation);
-      await circuitBreaker.execute(successfulOperation);
-
-      try {
-        await circuitBreaker.execute(failingOperation);
-      } catch (e) {}
-
-      try {
-        await circuitBreaker.execute(failingOperation);
-      } catch (e) {}
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, 4);
-      assert.strictEqual(metrics.successfulCalls, 2);
-      assert.strictEqual(metrics.failedCalls, 2);
-      assert.strictEqual(metrics.rejectedCalls, 0);
-      assert.strictEqual(metrics.currentState, ECircuitBreakerState.CLOSED);
-      assert(metrics.lastFailureTime instanceof Date);
-      assert(metrics.lastStateChangeTime instanceof Date);
-    });
-
-    it("should track rejected calls when circuit is open", async () => {
-      const options = {
-        durationOfBreakInMs: 60000,
-        failureThreshold: 2,
-        successThreshold: 2,
-      };
-
-      const circuitBreaker = new CircuitBreaker(options);
-      const failingOperation = createFailingOperation();
-      const successfulOperation = createSuccessfulOperation();
-
-      try {
-        await circuitBreaker.execute(failingOperation);
-      } catch (e) {}
-
-      try {
-        await circuitBreaker.execute(failingOperation);
-      } catch (e) {}
-
-      try {
-        await circuitBreaker.execute(successfulOperation);
-      } catch (e) {}
-
-      try {
-        await circuitBreaker.execute(successfulOperation);
-      } catch (e) {}
-
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, 4);
-      assert.strictEqual(metrics.successfulCalls, 0);
-      assert.strictEqual(metrics.failedCalls, 2);
-      assert.strictEqual(metrics.rejectedCalls, 2);
-    });
-  });
 
   describe("Error Handling", () => {
     it("should preserve original error when operation fails", async () => {
@@ -410,8 +323,6 @@ describe("CircuitBreaker", () => {
       const results = await Promise.all(operations);
 
       assert.strictEqual(results.length, 5);
-      assert.strictEqual(circuitBreaker.metrics.totalCalls, 5);
-      assert.strictEqual(circuitBreaker.metrics.successfulCalls, 5);
     });
 
     it("should handle mixed success and failure operations", async () => {
@@ -436,10 +347,6 @@ describe("CircuitBreaker", () => {
         await circuitBreaker.execute(createFailingOperation());
       } catch (e) {}
 
-      const metrics = circuitBreaker.metrics;
-      assert.strictEqual(metrics.totalCalls, 5);
-      assert.strictEqual(metrics.successfulCalls, 3);
-      assert.strictEqual(metrics.failedCalls, 2);
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
     });
 
