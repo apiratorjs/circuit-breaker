@@ -1,7 +1,9 @@
-export class CircuitBreakerError extends Error {
-  public readonly cause?: Error;
+import { TErrorLike } from "./types";
 
-  constructor(message: string, cause?: Error) {
+export class CircuitBreakerError extends Error {
+  public readonly cause?: TErrorLike;
+
+  constructor(message: string, cause?: TErrorLike) {
     super(message);
     this.name = this.constructor.name;
     this.cause = cause;
@@ -11,7 +13,14 @@ export class CircuitBreakerError extends Error {
     return {
       name: this.name,
       message: this.message,
-      cause: this.cause,
+      cause: this.cause
+        ? {
+            name: this.cause.name ?? "Error",
+            message: this.cause.message ?? String(this.cause),
+            code: this.cause.code,
+            status: this.cause.status,
+          }
+        : undefined,
     };
   }
 }
@@ -23,10 +32,10 @@ export class CircuitArgumentError extends CircuitBreakerError {
 }
 
 export class CircuitOpenError extends CircuitBreakerError {
-  constructor(cause?: Error) {
-    const message = cause
-      ? `Circuit breaker is open caused by: ${cause.message}`
-      : "Circuit breaker is open caused by: Service is not available";
+  constructor(cause?: TErrorLike) {
+    const message = `Circuit breaker is open caused by: ${
+      cause?.message ?? (cause ? String(cause) : "Service is not available")
+    }`;
     super(message, cause);
   }
 }
