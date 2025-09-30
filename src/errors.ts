@@ -1,4 +1,4 @@
-class CircuitBreakerError extends Error {
+export class CircuitBreakerError extends Error {
   public readonly cause?: Error;
 
   constructor(message: string, cause?: Error) {
