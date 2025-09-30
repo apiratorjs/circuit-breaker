@@ -60,33 +60,31 @@ pnpm add @apiratorjs/circuit-breaker
 ```typescript
 import { CircuitBreaker } from '@apiratorjs/circuit-breaker';
 
-// Create a circuit breaker with default settings
-const circuitBreaker = new CircuitBreaker({
+// Define your service call function
+async function callExternalService(data: any) {
+  // Your external service call here
+  const response = await fetch('https://api.example.com/data', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Service responded with ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+// Create a circuit breaker with your operation and settings
+const circuitBreaker = new CircuitBreaker(callExternalService, {
   failureThreshold: 5,        // Open circuit after 5 failures
   durationOfBreakInMs: 60000, // Keep circuit open for 60 seconds
   successThreshold: 2         // Close circuit after 2 successful calls in half-open state
 });
 
-// Wrap your service call
-async function callExternalService(data: any) {
-  return await circuitBreaker.execute(async () => {
-    // Your external service call here
-    const response = await fetch('https://api.example.com/data', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Service responded with ${response.status}`);
-    }
-    
-    return response.json();
-  });
-}
-
 // Use it in your application
 try {
-  const result = await callExternalService({ id: 123 });
+  const result = await circuitBreaker.execute({ id: 123 });
   console.log('Success:', result);
 } catch (error) {
   console.error('Circuit breaker prevented call or service failed:', error);
@@ -104,7 +102,6 @@ interface ICircuitBreakerOptions {
   failureThreshold: number;       // Number of failures before opening the circuit
   durationOfBreakInMs: number;    // How long to keep circuit open (milliseconds)
   successThreshold: number;       // Successful calls needed to close circuit from half-open
-  onStateChange?: (state: ECircuitBreakerState, error?: Error) => void; // Optional callback
 }
 ```
 
@@ -113,7 +110,6 @@ interface ICircuitBreakerOptions {
 - **`failureThreshold`** (required): Number of consecutive failures that will trigger the circuit to open
 - **`durationOfBreakInMs`** (required): Duration in milliseconds to keep the circuit open before attempting recovery
 - **`successThreshold`** (required): Number of successful calls needed in half-open state to close the circuit
-- **`onStateChange`** (optional): Callback function called whenever the circuit state changes
 
 ### Circuit Breaker States
 
@@ -131,15 +127,23 @@ enum ECircuitBreakerState {
 ```typescript
 import { CircuitBreaker, ECircuitBreakerState } from '@apiratorjs/circuit-breaker';
 
-const circuitBreaker = new CircuitBreaker({
+// Define your risky operation
+async function riskyOperation() {
+  // Your risky operation here
+  throw new Error('Service unavailable');
+}
+
+const circuitBreaker = new CircuitBreaker(riskyOperation, {
   failureThreshold: 3,
   durationOfBreakInMs: 30000,
-  successThreshold: 2,
-  onStateChange: (state, error) => {
-    console.log(`Circuit breaker state changed to: ${state}`);
-    if (error) {
-      console.log(`Triggered by error: ${error.message}`);
-    }
+  successThreshold: 2
+});
+
+// Set up state change monitoring
+circuitBreaker.onStateChange((state, error) => {
+  console.log(`Circuit breaker state changed to: ${state}`);
+  if (error) {
+    console.log(`Triggered by error: ${error.message}`);
   }
 });
 
@@ -149,47 +153,14 @@ console.log('Current state:', circuitBreaker.state);
 // Example usage
 async function makeCall() {
   try {
-    return await circuitBreaker.execute(async () => {
-      // Your risky operation here
-      throw new Error('Service unavailable');
-    });
+    return await circuitBreaker.execute();
   } catch (error) {
     console.log('Call failed:', error.message);
   }
 }
 ```
 
-## Using helpers and decorator (for typescript projects)
-
-### Higher-Order Function (withCircuitBreaker)
-
-Wrap any async function with circuit breaker functionality:
-
-```typescript
-import { withCircuitBreaker } from '@apiratorjs/circuit-breaker';
-
-// Define your async function
-async function fetchUserData(userId: string) {
-  const response = await fetch(`https://api.example.com/users/${userId}`);
-  if (!response.ok) throw new Error('Failed to fetch user');
-  return response.json();
-}
-
-// Wrap it with circuit breaker
-const protectedFetchUserData = withCircuitBreaker({
-  failureThreshold: 3,
-  durationOfBreakInMs: 30000,
-  successThreshold: 2
-})(fetchUserData);
-
-// Use the protected function
-try {
-  const user = await protectedFetchUserData('123');
-  console.log('User data:', user);
-} catch (error) {
-  console.error('Failed to fetch user:', error.message);
-}
-```
+## Using decorator (for typescript projects)
 
 ### Method Decorator (@WithCircuitBreaker)
 

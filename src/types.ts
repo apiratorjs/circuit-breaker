@@ -2,9 +2,9 @@ export interface ICircuitBreakerOptions {
   durationOfBreakInMs: number;
   failureThreshold: number;
   successThreshold: number;
-  onStateChange?: (state: ECircuitBreakerState, error?: Error) => void;
 }
 
+export type TCircuitBreakerOperation = (...args: any[]) => Promise<any> | any;
 
 export enum ECircuitBreakerState {
   CLOSED = "closed",

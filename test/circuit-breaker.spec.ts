@@ -21,8 +21,9 @@ describe("CircuitBreaker", () => {
         failureThreshold: 5,
         successThreshold: 3,
       };
+      const operation = createSuccessfulOperation();
 
-      const circuitBreaker = new CircuitBreaker(options);
+      const circuitBreaker = new CircuitBreaker(operation, options);
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
     });
@@ -37,20 +38,22 @@ describe("CircuitBreaker", () => {
         durationOfBreakInMs: 60000,
         failureThreshold: 2,
         successThreshold: 3,
-        onStateChange: (state: ECircuitBreakerState, error?: Error) => {
-          stateChanges.push({ state, error });
-        },
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
       const failingOperation = createFailingOperation();
+      const circuitBreaker = new CircuitBreaker(
+        failingOperation,
+        options
+      ).onStateChange((state: ECircuitBreakerState, error?: Error) => {
+        stateChanges.push({ state, error });
+      });
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(stateChanges.length, 1);
@@ -67,10 +70,10 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
       const successfulOperation = createSuccessfulOperation("test result");
+      const circuitBreaker = new CircuitBreaker(successfulOperation, options);
 
-      const result = await circuitBreaker.execute(successfulOperation);
+      const result = await circuitBreaker.execute();
 
       assert.strictEqual(result, "test result");
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
@@ -83,11 +86,11 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
       const failingOperation = createFailingOperation("test error");
+      const circuitBreaker = new CircuitBreaker(failingOperation, options);
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
         assert.fail("Should have thrown an error");
       } catch (error) {
         assert.strictEqual((error as Error).message, "test error");
@@ -103,17 +106,17 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
       const failingOperation = createFailingOperation("test error");
+      const circuitBreaker = new CircuitBreaker(failingOperation, options);
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
@@ -128,23 +131,22 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
       const failingOperation = createFailingOperation("original error");
+      const circuitBreaker = new CircuitBreaker(failingOperation, options);
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
 
-      const successfulOperation = createSuccessfulOperation();
-
+      // Now the circuit is open, any execution should throw CircuitOpenError
       try {
-        await circuitBreaker.execute(successfulOperation);
+        await circuitBreaker.execute();
         assert.fail("Should have thrown CircuitOpenError");
       } catch (error) {
         assert(error instanceof CircuitOpenError);
@@ -163,23 +165,32 @@ describe("CircuitBreaker", () => {
         successThreshold: 2,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
-      const failingOperation = createFailingOperation("test error");
+      // Create a dynamic operation that can change behavior
+      let shouldFail = true;
+      const dynamicOperation = () => {
+        if (shouldFail) {
+          throw new Error("test error");
+        }
+        return Promise.resolve("success");
+      };
+
+      const circuitBreaker = new CircuitBreaker(dynamicOperation, options);
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
 
       await delay(150);
 
-      const successfulOperation = createSuccessfulOperation();
-      await circuitBreaker.execute(successfulOperation);
+      // Now make the operation succeed
+      shouldFail = false;
+      await circuitBreaker.execute();
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.HALF_OPEN);
     });
@@ -193,26 +204,36 @@ describe("CircuitBreaker", () => {
         successThreshold: 2,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
-      const failingOperation = createFailingOperation("test error");
-      const successfulOperation = createSuccessfulOperation();
+      // Create a dynamic operation that can change behavior
+      let shouldFail = true;
+      const dynamicOperation = () => {
+        if (shouldFail) {
+          throw new Error("test error");
+        }
+        return Promise.resolve("success");
+      };
+
+      const circuitBreaker = new CircuitBreaker(dynamicOperation, options);
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
 
       await delay(150);
-      await circuitBreaker.execute(successfulOperation);
+
+      // Now make the operation succeed
+      shouldFail = false;
+      await circuitBreaker.execute();
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.HALF_OPEN);
 
-      await circuitBreaker.execute(successfulOperation);
+      await circuitBreaker.execute();
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
     });
@@ -224,31 +245,44 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
-      const failingOperation = createFailingOperation("test error");
-      const successfulOperation = createSuccessfulOperation();
+      // Create a dynamic operation that can change behavior
+      let shouldFail = true;
+      let callCount = 0;
+      const dynamicOperation = () => {
+        callCount++;
+        if (shouldFail) {
+          throw new Error("test error");
+        }
+        return Promise.resolve("success");
+      };
+
+      const circuitBreaker = new CircuitBreaker(dynamicOperation, options);
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       await delay(150);
-      await circuitBreaker.execute(successfulOperation);
+
+      // First call in HALF_OPEN should succeed to get to HALF_OPEN state
+      shouldFail = false;
+      await circuitBreaker.execute();
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.HALF_OPEN);
 
+      // Now make it fail again to transition back to OPEN
+      shouldFail = true;
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
     });
   });
-
 
   describe("Error Handling", () => {
     it("should preserve original error when operation fails", async () => {
@@ -258,13 +292,14 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
       const customError = new Error("Custom error message");
       const failingOperation = (): Promise<never> =>
         Promise.reject(customError);
 
+      const circuitBreaker = new CircuitBreaker(failingOperation, options);
+
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
         assert.fail("Should have thrown an error");
       } catch (error) {
         assert.strictEqual(error, customError);
@@ -279,21 +314,22 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
       const originalError = new Error("Original failure");
       const failingOperation = (): Promise<never> =>
         Promise.reject(originalError);
 
+      const circuitBreaker = new CircuitBreaker(failingOperation, options);
+
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(failingOperation);
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(createSuccessfulOperation());
+        await circuitBreaker.execute();
         assert.fail("Should have thrown CircuitOpenError");
       } catch (error) {
         assert(error instanceof CircuitOpenError);
@@ -313,16 +349,33 @@ describe("CircuitBreaker", () => {
         successThreshold: 2,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
-      const operations: Promise<number>[] = [];
+      const successfulOperation = createSuccessfulOperation();
+      const circuitBreaker = new CircuitBreaker(successfulOperation, options);
+      const operations: Promise<string>[] = [];
 
       for (let i = 0; i < 5; i++) {
-        operations.push(circuitBreaker.execute(createSuccessfulOperation(i)));
+        operations.push(
+          new Promise<string>((resolve, reject) => {
+            try {
+              const result = circuitBreaker.execute<string>();
+              if (result instanceof Promise) {
+                result.then(resolve).catch(reject);
+              } else {
+                resolve(result);
+              }
+            } catch (error) {
+              reject(error);
+            }
+          })
+        );
       }
 
       const results = await Promise.all(operations);
 
       assert.strictEqual(results.length, 5);
+      results.forEach(result => {
+        assert.strictEqual(result, "success");
+      });
     });
 
     it("should handle mixed success and failure operations", async () => {
@@ -332,22 +385,25 @@ describe("CircuitBreaker", () => {
         successThreshold: 3,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
+      // Test with successful operation
+      const successOperation = createSuccessfulOperation();
+      const successCircuitBreaker = new CircuitBreaker(
+        successOperation,
+        options
+      );
+      await successCircuitBreaker.execute();
+      assert.strictEqual(
+        successCircuitBreaker.state,
+        ECircuitBreakerState.CLOSED
+      );
 
-      await circuitBreaker.execute(createSuccessfulOperation());
-
+      // Test with failing operation
+      const failOperation = createFailingOperation();
+      const failCircuitBreaker = new CircuitBreaker(failOperation, options);
       try {
-        await circuitBreaker.execute(createFailingOperation());
+        await failCircuitBreaker.execute();
       } catch (e) {}
-
-      await circuitBreaker.execute(createSuccessfulOperation());
-      await circuitBreaker.execute(createSuccessfulOperation());
-
-      try {
-        await circuitBreaker.execute(createFailingOperation());
-      } catch (e) {}
-
-      assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
+      assert.strictEqual(failCircuitBreaker.state, ECircuitBreakerState.CLOSED);
     });
 
     it("should handle zero thresholds gracefully", async () => {
@@ -357,10 +413,11 @@ describe("CircuitBreaker", () => {
         successThreshold: 1,
       };
 
-      const circuitBreaker = new CircuitBreaker(options);
+      const operation = createFailingOperation();
+      const circuitBreaker = new CircuitBreaker(operation, options);
 
       try {
-        await circuitBreaker.execute(createFailingOperation());
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);

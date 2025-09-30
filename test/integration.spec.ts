@@ -51,20 +51,22 @@ describe("Integration Tests", () => {
         timestamp: number;
       }> = [];
 
-      const circuitBreaker = new CircuitBreaker({
-        durationOfBreakInMs: 200,
-        failureThreshold: 3,
-        successThreshold: 2,
-        onStateChange: (state: ECircuitBreakerState, error?: Error) => {
-          stateChanges.push({
-            state,
-            error: error?.message,
-            timestamp: Date.now(),
-          });
-        },
+      const circuitBreaker = new CircuitBreaker(
+        () => mockDB.call("test-request"),
+        {
+          durationOfBreakInMs: 200,
+          failureThreshold: 3,
+          successThreshold: 2,
+        }
+      ).onStateChange((state: ECircuitBreakerState, error?: Error) => {
+        stateChanges.push({
+          state,
+          error: error?.message,
+          timestamp: Date.now(),
+        });
       });
 
-      let result = await circuitBreaker.execute(() => mockDB.call("user-123"));
+      let result = await circuitBreaker.execute<string>();
       assert(result.includes("Success"));
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
 
@@ -72,7 +74,7 @@ describe("Integration Tests", () => {
 
       for (let i = 0; i < 3; i++) {
         try {
-          await circuitBreaker.execute(() => mockDB.call(`request-${i}`));
+          await circuitBreaker.execute();
           assert.fail("Should have failed");
         } catch (error) {
           if (i < 2) {
@@ -89,7 +91,7 @@ describe("Integration Tests", () => {
       assert.strictEqual(stateChanges[0].state, ECircuitBreakerState.OPEN);
 
       try {
-        await circuitBreaker.execute(() => mockDB.call("rejected-request"));
+        await circuitBreaker.execute();
         assert.fail("Should have been rejected");
       } catch (error) {
         assert(error instanceof CircuitOpenError);
@@ -98,15 +100,11 @@ describe("Integration Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
       mockDB.setFailureMode(false); // Service recovers
 
-      result = await circuitBreaker.execute(() =>
-        mockDB.call("recovery-test-1")
-      );
+      result = await circuitBreaker.execute<string>();
       assert(result.includes("Success"));
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.HALF_OPEN);
 
-      result = await circuitBreaker.execute(() =>
-        mockDB.call("recovery-test-2")
-      );
+      result = await circuitBreaker.execute<string>();
       assert(result.includes("Success"));
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
 
@@ -118,7 +116,8 @@ describe("Integration Tests", () => {
     it("should handle intermittent failures correctly", async () => {
       const mockAPI = new MockService();
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => mockAPI.call("test");
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 100,
         failureThreshold: 5,
         successThreshold: 3,
@@ -138,9 +137,7 @@ describe("Integration Tests", () => {
         mockAPI.setFailureMode(op.shouldFail);
 
         try {
-          const result = await circuitBreaker.execute(() =>
-            mockAPI.call(op.data)
-          );
+          const result = await circuitBreaker.execute<string>();
           assert(
             !op.shouldFail,
             "Expected success but operation was marked to fail"
@@ -164,7 +161,8 @@ describe("Integration Tests", () => {
     it("should handle quick recovery attempts correctly", async () => {
       const mockService = new MockService();
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => mockService.call("test");
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 100,
         failureThreshold: 2,
         successThreshold: 3,
@@ -173,11 +171,11 @@ describe("Integration Tests", () => {
       mockService.setFailureMode(true);
 
       try {
-        await circuitBreaker.execute(() => mockService.call("fail-1"));
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(() => mockService.call("fail-2"));
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
@@ -185,7 +183,7 @@ describe("Integration Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       try {
-        await circuitBreaker.execute(() => mockService.call("recovery-fail"));
+        await circuitBreaker.execute();
         assert.fail("Should have failed");
       } catch (error) {
         assert(!(error instanceof CircuitOpenError));
@@ -197,9 +195,7 @@ describe("Integration Tests", () => {
       mockService.setFailureMode(false);
 
       for (let i = 0; i < 3; i++) {
-        const result = await circuitBreaker.execute(() =>
-          mockService.call(`recovery-${i}`)
-        );
+        const result = await circuitBreaker.execute<string>();
         assert(result.includes("Success"));
       }
 
@@ -211,7 +207,8 @@ describe("Integration Tests", () => {
     it("should handle high-frequency operations", async () => {
       const mockService = new MockService();
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => mockService.call("test");
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 1000,
         failureThreshold: 10,
         successThreshold: 5,
@@ -222,7 +219,18 @@ describe("Integration Tests", () => {
 
       for (let i = 0; i < operationCount; i++) {
         operations.push(
-          circuitBreaker.execute(() => mockService.call(`high-freq-${i}`))
+          new Promise<string>((resolve, reject) => {
+            try {
+              const result = circuitBreaker.execute<string>();
+              if (result instanceof Promise) {
+                result.then(resolve).catch(reject);
+              } else {
+                resolve(result as string);
+              }
+            } catch (error) {
+              reject(error);
+            }
+          })
         );
       }
 
@@ -236,7 +244,8 @@ describe("Integration Tests", () => {
       const slowService = new MockService();
       slowService.setDelay(50); // 50ms delay per operation
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => slowService.call("test");
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 200,
         failureThreshold: 3,
         successThreshold: 2,
@@ -247,7 +256,18 @@ describe("Integration Tests", () => {
       const operations: Promise<string>[] = [];
       for (let i = 0; i < 5; i++) {
         operations.push(
-          circuitBreaker.execute(() => slowService.call(`slow-${i}`))
+          new Promise<string>((resolve, reject) => {
+            try {
+              const result = circuitBreaker.execute<string>();
+              if (result instanceof Promise) {
+                result.then(resolve).catch(reject);
+              } else {
+                resolve(result as string);
+              }
+            } catch (error) {
+              reject(error);
+            }
+          })
         );
       }
 
@@ -265,7 +285,8 @@ describe("Integration Tests", () => {
     it("should preserve error details through circuit breaker", async () => {
       const mockService = new MockService();
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => mockService.call("error-test");
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 1000,
         failureThreshold: 5,
         successThreshold: 3,
@@ -274,7 +295,7 @@ describe("Integration Tests", () => {
       mockService.setFailureMode(true);
 
       try {
-        await circuitBreaker.execute(() => mockService.call("error-test"));
+        await circuitBreaker.execute();
         assert.fail("Should have thrown error");
       } catch (error) {
         assert((error as Error).message.includes("Service failure #1"));
@@ -284,37 +305,35 @@ describe("Integration Tests", () => {
     });
 
     it("should maintain error context across state transitions", async () => {
-      const mockService = new MockService();
       let lastCapturedError: Error | null = null;
+      const customError = new Error("Critical system failure");
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => {
+        throw customError;
+      };
+
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 100,
         failureThreshold: 2,
         successThreshold: 2,
-        onStateChange: (state: ECircuitBreakerState, error?: Error) => {
-          if (error) {
-            lastCapturedError = error;
-          }
-        },
+      }).onStateChange((state: ECircuitBreakerState, error?: Error) => {
+        if (error) {
+          lastCapturedError = error;
+        }
       });
 
-      mockService.setFailureMode(true);
-      const customError = new Error("Critical system failure");
-
       try {
-        await circuitBreaker.execute(() => Promise.reject(customError));
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(() => Promise.reject(customError));
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(lastCapturedError, customError);
 
       try {
-        await circuitBreaker.execute(() =>
-          mockService.call("should-be-rejected")
-        );
+        await circuitBreaker.execute();
         assert.fail("Should have been rejected");
       } catch (error) {
         assert(error instanceof CircuitOpenError);
@@ -332,7 +351,8 @@ describe("Integration Tests", () => {
     it("should work with minimal thresholds", async () => {
       const mockService = new MockService();
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => mockService.call("test");
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 50,
         failureThreshold: 1,
         successThreshold: 1,
@@ -340,7 +360,7 @@ describe("Integration Tests", () => {
 
       mockService.setFailureMode(true);
       try {
-        await circuitBreaker.execute(() => mockService.call("single-fail"));
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
@@ -348,14 +368,15 @@ describe("Integration Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 75));
       mockService.setFailureMode(false);
 
-      await circuitBreaker.execute(() => mockService.call("single-success"));
+      await circuitBreaker.execute();
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.CLOSED);
     });
 
     it("should handle very short timeout durations", async () => {
       const mockService = new MockService();
 
-      const circuitBreaker = new CircuitBreaker({
+      const operation = () => mockService.call("test");
+      const circuitBreaker = new CircuitBreaker(operation, {
         durationOfBreakInMs: 1, // Very short timeout
         failureThreshold: 2,
         successThreshold: 2,
@@ -364,11 +385,11 @@ describe("Integration Tests", () => {
       mockService.setFailureMode(true);
 
       try {
-        await circuitBreaker.execute(() => mockService.call("fail-1"));
+        await circuitBreaker.execute();
       } catch (e) {}
 
       try {
-        await circuitBreaker.execute(() => mockService.call("fail-2"));
+        await circuitBreaker.execute();
       } catch (e) {}
 
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.OPEN);
@@ -376,7 +397,7 @@ describe("Integration Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
       mockService.setFailureMode(false);
 
-      await circuitBreaker.execute(() => mockService.call("quick-recovery"));
+      await circuitBreaker.execute();
       assert.strictEqual(circuitBreaker.state, ECircuitBreakerState.HALF_OPEN);
     });
   });

@@ -3,6 +3,7 @@ import { CircuitArgumentError, CircuitOpenError } from "./errors.js";
 import {
   ECircuitBreakerState,
   ICircuitBreakerOptions,
+  TCircuitBreakerOperation,
 } from "./types.js";
 
 export class CircuitBreaker {
@@ -15,16 +16,27 @@ export class CircuitBreaker {
   private _durationOfBreakInMs: number;
   private _failureThreshold: number;
   private _lastError?: Error;
-  private _onStateChange?: (state: ECircuitBreakerState, error?: Error) => void;
+  private _onStateChangeCallback?: (
+    state: ECircuitBreakerState,
+    error?: Error
+  ) => void;
+  private _operation: TCircuitBreakerOperation;
 
-
-  constructor(options: ICircuitBreakerOptions) {
+  constructor(
+    operation: TCircuitBreakerOperation,
+    options: ICircuitBreakerOptions
+  ) {
     this._state = ECircuitBreakerState.CLOSED;
     this._failureCount = 0;
     this._successCount = 0;
     this._lastFailureTime = new Date();
     this._lastStateChangeTime = new Date();
+    this._operation = operation;
 
+    assert(
+      operation,
+      new CircuitArgumentError("onExecutableFunction must be provided")
+    );
     assert(
       options.successThreshold > 0,
       new CircuitArgumentError("successThreshold must be greater than 0")
@@ -41,11 +53,9 @@ export class CircuitBreaker {
     this._successThreshold = options.successThreshold;
     this._durationOfBreakInMs = options.durationOfBreakInMs;
     this._failureThreshold = options.failureThreshold;
-    this._onStateChange = options.onStateChange;
-
   }
 
-  public execute<T>(fn: () => Promise<T>): Promise<T> {
+  public execute<T>(...args: any[]): Promise<T> | T {
     if (
       this._state === ECircuitBreakerState.OPEN &&
       this._lastFailureTime.getTime() + this._durationOfBreakInMs <= Date.now()
@@ -58,17 +68,23 @@ export class CircuitBreaker {
       throw new CircuitOpenError(this._lastError);
     }
 
-    return this.attemptToExecute(fn);
+    return this.attemptToExecute(args);
+  }
+
+  public onStateChange(
+    callback: (state: ECircuitBreakerState, error?: Error) => void
+  ): this {
+    this._onStateChangeCallback = callback;
+    return this;
   }
 
   public get state(): ECircuitBreakerState {
     return this._state;
   }
 
-
-  private async attemptToExecute<T>(operation: () => Promise<T>): Promise<T> {
+  private async attemptToExecute<T>(...args: any[]): Promise<T> {
     try {
-      const result = await operation();
+      const result = await this._operation?.(...args);
       this.onSuccess();
       return result;
     } catch (error: any) {
@@ -78,7 +94,6 @@ export class CircuitBreaker {
   }
 
   private onSuccess() {
-
     if (this._state === ECircuitBreakerState.CLOSED) {
       return;
     }
@@ -114,7 +129,7 @@ export class CircuitBreaker {
     if (this._state !== newState) {
       this._state = newState;
       this._lastStateChangeTime = new Date();
-      this._onStateChange?.(newState, error);
+      this._onStateChangeCallback?.(newState, error);
     }
   }
 
