@@ -11,7 +11,6 @@ export class CircuitBreakerError extends Error {
     return {
       name: this.name,
       message: this.message,
-      stack: this.stack,
       cause: this.cause,
     };
   }

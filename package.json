@@ -1,6 +1,6 @@
 {
   "name": "@apiratorjs/circuit-breaker",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "A robust and lightweight TypeScript circuit breaker implementation for Node.js applications. Provides fault tolerance and stability by preventing cascading failures in distributed systems with configurable thresholds and automatic recovery.",
   "author": {
     "name": "Alexey Zaitsev",
